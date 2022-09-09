@@ -1,15 +1,18 @@
 const express = require("express");
 const app = express();
 const PORT = 8080; // default port 8080
+const cookieParser = require('cookie-parser');
+
 
 app.use(express.urlencoded({ extended: true }));
 app.set("view engine", "ejs");
+app.use(cookieParser());
 
-function generateRandomString() {  
+function generateRandomString(stringLength) {  
 let result = ""
 let characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
 charactersLength = characters.length
-for (let i = 0; i < length; i++) {
+for (let i = 0; i < stringLength; i++) {
   result += characters.charAt(Math.floor(Math.random() * charactersLength))
 }
 return result
@@ -20,12 +23,59 @@ const urlDatabase = {
   "9sm5xK": "http://www.google.com"
 };
 
+const users = {
+  userRandomID: {
+    id: "userRandomID",
+    email: "user@example.com",
+    password: "purple-monkey-dinosaur",
+  },
+  user2RandomID: {
+    id: "user2RandomID",
+    email: "user2@example.com",
+    password: "dishwasher-funk",
+  },
+};
+
+function isNewEmail(emailAddress) {
+  for (const u in users) {
+    if (users[u].email.toUpperCase() === emailAddress.toUpperCase()) {
+      return false;
+    }
+  }
+  return true;
+};
+
 app.post("/urls", (req, res) => {
   console.log("req.body:",req.body);  // Log the POST request body to the console
   const shortURL = generateRandomString()
   const longURL = req.body.longURL;
   urlDatabase[shortURL] = longURL;
   res.redirect(`/urls/${shortURL}`);
+});
+
+app.get("/register", (req, res) => {
+  const user = users[req.cookies["user_id"]];
+  templateVars = { user };
+  res.render("registration", templateVars);
+});
+
+app.post("/register", (req, res) => {
+  const newUserId = generateRandomString(8);
+  const newUserEmail = req.body.email;
+  const newUserPassword = req.body.password;
+
+  if (newUserEmail && newUserPassword && isNewEmail(newUserEmail)) {
+    users[newUserId] = {
+      id: newUserId,
+      email: newUserEmail,
+      password: newUserPassword
+    };
+    res.cookie("user_id", newUserId);
+    res.redirect("/urls");
+  } else {
+    res.status(400);
+    res.send('Error 400');
+  };
 });
 
 app.get("/", (req, res) => {
@@ -45,16 +95,20 @@ app.get("/hello", (req, res) => {
 });
 
 app.get("/urls", (req, res) => {
-  const templateVars = { urls: urlDatabase };
+  const user = users[req.cookies["user_id"]];
+  const templateVars = { urls: urlDatabase, user };
   res.render("urls_index", templateVars);
 });
 
 app.get("/urls/new", (req, res) => {
-  res.render("urls_new");
+  const user = users[req.cookies["user_id"]];
+  templateVars = { user };
+  res.render("urls_new", templateVars);
 });
 
 app.get("/urls/:shortURL", (req, res) => {
-  const templateVars = { shortURL: req.params.shortURL, longURL: req.params.longURL };
+  const user = users[req.cookies["user_id"]];
+  const templateVars = { shortURL: req.params.shortURL, longURL: urlDatabase[req.params.shortURL], user }; // MODIFIED!!!!!!
   res.render("urls_show", templateVars);
 });
 
@@ -67,5 +121,14 @@ app.get("/u/:shortURL", (req, res) => {
 
 app.post("/urls/:shortURL/delete", (req, res) => {
   delete urlDatabase[req.params.shortURL];
+  res.redirect("/urls");
+});
+
+app.post('/login', (req, res) => {
+    res.redirect("/urls");
+  });
+
+app.post("/logout", (req, res) => {
+  res.clearCookie("user_id");
   res.redirect("/urls");
 });
