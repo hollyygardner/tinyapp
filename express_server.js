@@ -2,6 +2,7 @@ const express = require("express");
 const app = express();
 const PORT = 8080; // default port 8080
 const cookieParser = require('cookie-parser');
+const { getUserByEmail } = require("./helpers");
 
 
 app.use(express.urlencoded({ extended: true }));
@@ -64,7 +65,7 @@ app.post("/register", (req, res) => {
   const newUserEmail = req.body.email;
   const newUserPassword = req.body.password;
 
-  if (newUserEmail && newUserPassword && isNewEmail(newUserEmail)) {
+  if (newUserEmail && newUserPassword && isNewEmail(newUserEmail, users)) {
     users[newUserId] = {
       id: newUserId,
       email: newUserEmail,
@@ -125,10 +126,29 @@ app.post("/urls/:shortURL/delete", (req, res) => {
 });
 
 app.post('/login', (req, res) => {
+  const enteredEmail = req.body.email;
+  const enteredPassword = req.body.password;
+  const userId = getUserByEmail(enteredEmail, users);
+  if (userId && users[userId].password === enteredPassword) {
+    res.cookie("user_id", userId);
     res.redirect("/urls");
-  });
+  } else {
+    res.status(403);
+    res.send('Error 403');
+  }
+  const templateVars = { user };
+  res.render("login", templateVars);
+});
+
 
 app.post("/logout", (req, res) => {
   res.clearCookie("user_id");
   res.redirect("/urls");
 });
+
+app.get('/login', (req, res) => {
+  const user = users[req.cookies["user_id"]];
+  const templateVars = { user };
+  res.render("login", templateVars);
+});
+
