@@ -2,7 +2,7 @@ const express = require("express");
 const app = express();
 const PORT = 8080; // default port 8080
 const cookieParser = require('cookie-parser');
-const { getUserByEmail } = require("./helpers");
+const { getUserByEmail, urlsForUserId } = require("./helpers");
 
 
 app.use(express.urlencoded({ extended: true }));
@@ -20,8 +20,14 @@ return result
 }
 
 const urlDatabase = {
-  "b2xVn2": "http://www.lighthouselabs.ca",
-  "9sm5xK": "http://www.google.com"
+  b6UTxQ: {
+    longURL: "https://www.tsn.ca",
+    userID: "aJ48lW",
+  },
+  i3BoGr: {
+    longURL: "https://www.google.ca",
+    userID: "aJ48lW",
+  },
 };
 
 const users = {
@@ -47,11 +53,18 @@ function isNewEmail(emailAddress) {
 };
 
 app.post("/urls", (req, res) => {
-  console.log("req.body:",req.body);  // Log the POST request body to the console
-  const shortURL = generateRandomString()
-  const longURL = req.body.longURL;
-  urlDatabase[shortURL] = longURL;
-  res.redirect(`/urls/${shortURL}`);
+  if (req.cookies["user_id"]) {
+    const shortURL = generateRandomString(6);
+    const longURL = req.body.longURL;
+    urlDatabase[shortURL] = {
+      longURL,
+      userID: req.cookies["user_id"] 
+    };
+    res.redirect(`/urls/${shortURL}`);
+  } else {
+    res.status(403);
+    res.send('Error 403. Must be logged in to request URL.');
+  }
 });
 
 app.get("/register", (req, res) => {
@@ -97,14 +110,23 @@ app.get("/hello", (req, res) => {
 
 app.get("/urls", (req, res) => {
   const user = users[req.cookies["user_id"]];
-  const templateVars = { urls: urlDatabase, user };
-  res.render("urls_index", templateVars);
+  if (user) {
+    const userURLdatabase = urlsForUserId(user.id, urlDatabase);
+    const templateVars = { urls: userURLdatabase, user };
+    res.render("urls_index", templateVars);
+  } else {
+    res.redirect("/login");
+  }
 });
 
 app.get("/urls/new", (req, res) => {
   const user = users[req.cookies["user_id"]];
   templateVars = { user };
-  res.render("urls_new", templateVars);
+  if (user) {
+    res.render("urls_new", templateVars);
+  } else {
+    res.render("login", templateVars);
+  }
 });
 
 app.get("/urls/:shortURL", (req, res) => {
@@ -114,18 +136,52 @@ app.get("/urls/:shortURL", (req, res) => {
 });
 
 app.get("/u/:shortURL", (req, res) => {
-  const longURL = urlDatabase[req.params.shortURL];
-  console.log('Testing the database:', urlDatabase);
-  console.log('Param: ', req.params);
+  const longURL = urlDatabase[req.params.shortURL].longURL;;
   res.redirect(longURL);
 });
 
 app.post("/urls/:shortURL/delete", (req, res) => {
-  delete urlDatabase[req.params.shortURL];
+  const user = users[req.cookies["user_id"]];
+  if (user && user.id === urlDatabase[req.params.shortURL].userID) {
+    delete urlDatabase[req.params.shortURL];
+  } else {
+    res.status(403);
+    res.send("Error - you do not own URL");
+  }
   res.redirect("/urls");
 });
 
+app.post("/urls/:shortURL", (req, res) => {
+  const shortURL = req.params.shortURL; 
+  const longURL = req.body.longURL; 
+  const user = users[req.cookies["user_id"]];
+  if (user && user.id === urlDatabase[req.params.shortURL].userID) {
+    urlDatabase[shortURL] = {
+      longURL,
+      userID: req.cookies["user_id"]   
+    } 
+    res.redirect("/urls");  
+  } else {
+    res.status(403);
+    res.send("Error - you do not own URL. Please login to continue");
+
+  }
+});
+
+app.get("/urls/:shortURL", (req, res) => { 
+  const user = users[req.cookies["user_id"]];
+  if (user && urlDatabase[req.params.shortURL] && user.id === urlDatabase[req.params.shortURL].userID) {
+    const userURLdatabase = urlsForUserId(user.id, urlDatabase);
+    const templateVars = { shortURL: req.params.shortURL, longURL: urlDatabase[req.params.shortURL].longURL, user };
+    res.render("urls_show", templateVars);
+  } else {
+    res.status(403);
+    res.send("Error - the URL does not exist or belong to you. Please login to continue");
+  }
+});
+
 app.post('/login', (req, res) => {
+  //Login endpoint 
   const enteredEmail = req.body.email;
   const enteredPassword = req.body.password;
   const userId = getUserByEmail(enteredEmail, users);
@@ -133,13 +189,10 @@ app.post('/login', (req, res) => {
     res.cookie("user_id", userId);
     res.redirect("/urls");
   } else {
-    res.status(403);
-    res.send('Error 403');
+    res.status(400);
+    res.send('Error 400 - invalid login');
   }
-  const templateVars = { user };
-  res.render("login", templateVars);
 });
-
 
 app.post("/logout", (req, res) => {
   res.clearCookie("user_id");
