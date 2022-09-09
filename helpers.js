@@ -1,7 +1,9 @@
 const getUserByEmail = function(emailAddress, users) {
-  for (let i in users) {
-    if (users[i].email.toUpperCase() === emailAddress.toUpperCase()) {
-      return i;
+  for (let u in users) {
+    if (users[u].email.toUpperCase() === emailAddress.toUpperCase()) {
+      return u;
     }
   }
 };
+
+module.exports = { getUserByEmail };
